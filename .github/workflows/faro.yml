@@ -4,6 +4,12 @@
 # internet completo hacia Apple y Google), actualiza el histórico, y PUBLICA el
 # dashboard en GitHub Pages (tu URL personal). No necesita tu Mac, ni Drive, ni
 # Claude. Todo vive en tu cuenta de GitHub.
+#
+# NOTA (27/11/2026): el paso "Publicar en GitHub Pages" fallaba de forma
+# intermitente con "Deployment failed, try again later." — un error TRANSITORIO
+# del backend de GitHub Pages, no del script. Para que deje de mandar correos de
+# fallo, el deploy ahora REINTENTA una vez (espera 60 s y vuelve a intentar). El
+# workflow solo falla si el deploy truena dos veces seguidas.
 
 name: Faro descargas
 
@@ -26,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy2.outputs.page_url }}
     steps:
       - name: Bajar el repositorio
         uses: actions/checkout@v4
@@ -74,6 +80,17 @@ jobs:
         with:
           path: _site
 
+      # --- Publicar en Pages con reintento ante fallos transitorios ---
       - name: Publicar en GitHub Pages
         id: deploy
+        continue-on-error: true        # no truena el workflow si falla el 1er intento
         uses: actions/deploy-pages@v4
+
+      - name: Esperar antes de reintentar
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 60
+
+      - name: Publicar en GitHub Pages (reintento)
+        id: deploy2
+        if: steps.deploy.outcome == 'failure'
+        uses: actions/deploy-pages@v4   # si ESTE falla, ahí sí falla el workflow y te avisa
